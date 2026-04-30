@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>English Battle RPG</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.png">
+
+  <style>
+    body { margin:0; background:#111; color:white; font-family:Arial; overflow:hidden; }
+    canvas { background:#222; display:block; }
+
+    #ui {
+      position:fixed;
+      top:10px;
+      left:10px;
+    }
+
+    #battleUI {
+      position:fixed;
+      bottom:0;
+      width:100%;
+      background:#000;
+      padding:10px;
+      display:none;
+    }
+
+    button {
+      padding:10px;
+      margin:5px;
+    }
+
+    input {
+      padding:10px;
+      width:90%;
+    }
+
+    /* joystick */
+    #joystick {
+      position:fixed;
+      bottom:30px;
+      left:30px;
+      width:120px;
+      height:120px;
+      background:#333;
+      border-radius:50%;
+    }
+
+    #stick {
+      width:50px;
+      height:50px;
+      background:lime;
+      border-radius:50%;
+      position:absolute;
+      left:35px;
+      top:35px;
+    }
+  </style>
+</head>
+
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="ui">
+❤️ HP: <span id="hp"></span><br>
+💰 Gold: <span id="gold"></span>
+</div>
+
+<div id="battleUI">
+<p id="battleText"></p>
+<input id="input" placeholder="Write sentence..." />
+<br>
+<button onclick="attack()">⚔️ Attack</button>
+<button onclick="heal()">🧪 Heal</button>
+<button onclick="run()">🏃 Run</button>
+</div>
+
+<!-- joystick -->
+<div id="joystick">
+  <div id="stick"></div>
+</div>
+
+<script>
+
+// canvas
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// player
+let player = {x:200,y:200,size:20,hp:100,gold:0};
+
+// enemies
+let enemies = [];
+for(let i=0;i<5;i++){
+  enemies.push({x:Math.random()*1000,y:Math.random()*1000,size:20,hp:50});
+}
+
+let cam = {x:0,y:0};
+
+// battle
+let inBattle = false;
+let currentEnemy = null;
+let verbs = ["run","eat","jump","read","write"];
+let currentVerb = "";
+
+// ING
+function toIng(v){
+  if(v.endsWith("e")) return v.slice(0,-1)+"ing";
+  return v+"ing";
+}
+
+// validar
+function isCorrect(input){
+  let ing = toIng(currentVerb);
+  return input.startsWith("i am "+ing);
+}
+
+// start battle
+function startBattle(enemy){
+  inBattle = true;
+  currentEnemy = enemy;
+  currentVerb = verbs[Math.floor(Math.random()*verbs.length)];
+
+  battleUI.style.display = "block";
+  battleText.innerText = "👹 Verb: "+currentVerb;
+}
+
+// attack
+function attack(){
+  let input = document.getElementById("input").value.toLowerCase();
+
+  if(isCorrect(input)){
+    let dmg = Math.floor(Math.random()*20)+10;
+    currentEnemy.hp -= dmg;
+
+    battleText.innerText = "✅ -"+dmg;
+
+    if(currentEnemy.hp <= 0){
+      player.gold += 20;
+      battleText.innerText = "🔥 Victory!";
+      inBattle = false;
+      battleUI.style.display = "none";
+    }
+
+  } else {
+    enemyTurn();
+  }
+
+  input.value="";
+}
+
+// enemy turn
+function enemyTurn(){
+  let dmg = 10;
+  player.hp -= dmg;
+  battleText.innerText += " | 👹 -"+dmg;
+
+  if(player.hp <= 0){
+    player.hp = 0;
+    battleText.innerText = "💀 Game Over";
+  }
+}
+
+// heal
+function heal(){
+  player.hp += 20;
+  if(player.hp > 100) player.hp = 100;
+  battleText.innerText = "🧪 Heal";
+  enemyTurn();
+}
+
+// run
+function run(){
+  if(Math.random()<0.5){
+    battleText.innerText="🏃 Escaped";
+    inBattle=false;
+    battleUI.style.display="none";
+  } else {
+    enemyTurn();
+  }
+}
+
+// joystick
+let joy = document.getElementById("joystick");
+let stick = document.getElementById("stick");
+let moveDir = {x:0,y:0};
+let dragging=false;
+
+joy.addEventListener("touchstart",()=>dragging=true);
+
+joy.addEventListener("touchmove",e=>{
+  if(!dragging) return;
+
+  let t=e.touches[0];
+  let rect=joy.getBoundingClientRect();
+
+  let dx=t.clientX-(rect.left+60);
+  let dy=t.clientY-(rect.top+60);
+
+  let dist=Math.sqrt(dx*dx+dy*dy);
+  let max=40;
+
+  if(dist>max){
+    dx=dx/dist*max;
+    dy=dy/dist*max;
+  }
+
+  stick.style.left=(35+dx)+"px";
+  stick.style.top=(35+dy)+"px";
+
+  moveDir.x=dx/40;
+  moveDir.y=dy/40;
+});
+
+joy.addEventListener("touchend",()=>{
+  dragging=false;
+  moveDir={x:0,y:0};
+  stick.style.left="35px";
+  stick.style.top="35px";
+});
+
+// collision
+function collide(a,b){
+  return Math.hypot(a.x-b.x,a.y-b.y) < 20;
+}
+
+// update
+function update(){
+  if(!inBattle){
+    player.x += moveDir.x*4;
+    player.y += moveDir.y*4;
+
+    enemies.forEach(e=>{
+      if(collide(player,e)){
+        startBattle(e);
+      }
+    });
+  }
+
+  cam.x = player.x - canvas.width/2;
+  cam.y = player.y - canvas.height/2;
+
+  hp.innerText = Math.floor(player.hp);
+  gold.innerText = player.gold;
+}
+
+// draw
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  ctx.save();
+  ctx.translate(-cam.x,-cam.y);
+
+  ctx.fillStyle="red";
+  enemies.forEach(e=>{
+    ctx.fillRect(e.x,e.y,20,20);
+  });
+
+  ctx.fillStyle="lime";
+  ctx.fillRect(player.x,player.y,20,20);
+
+  ctx.restore();
+}
+
+// loop
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+
+// service worker
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js");
+}
+
+</script>
+
+</body>
+</html>
